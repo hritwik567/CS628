@@ -120,7 +120,7 @@ func StoreEncryptedData(key string, value []byte, enKey []byte) {
 	userlib.DatastoreSet(datastoreKey, value);
 }
 
-func LoadDecryptedData(key string, enKey []byte) ([]byte, error){
+func LoadDecryptedData(key string, enKey []byte) ([]byte, error) {
 	value, ok := userlib.DatastoreGet(datastoreKey);
 	if !ok {
 		return nil, errors.New(strings.ToTitle("Key Does Not Exist"));
@@ -148,7 +148,31 @@ func LoadDecryptedData(key string, enKey []byte) ([]byte, error){
 	return ciphertext, nil;
 }
 
+func ReadFileStruct(key string, enKey []byte) (File, error) {
+	var filedata File;
+	var mData []byte;
+	var _err error;
 
+	for {
+		//Loading File struct
+		mData, _err = LoadDecryptedData(key, enKey);
+		if _err != nil {
+			return nil, nil, nil, _err;
+		}
+
+		//unmarshalling data
+		json.Unmarshal(mData, &filedata);
+
+		if filedata.Type == "notShared" {
+			return key, enKey, filedata, nil;
+		}
+
+		key = filedata.DataPointer;
+		enKey = filedata.EnKey;
+	}
+
+	return nil, nil, nil, errors.New(strings.ToTitle("Data Tampered"));
+}
 // This creates a user.  It will only be called once for a user
 // (unless the keystore and datastore are cleared during testing purposes)
 
@@ -255,7 +279,7 @@ func (userdata *User) StoreFile(filename string, data []byte) {
 	StoreEncryptedData(metaFdata.FilePointer, mData, metaFdata.EnKey);
 	
 	//Marshalling and storing MetaFile struct
-	mData, _ := json.Marshal(metaFdata);
+	mData, _ = json.Marshal(metaFdata);
 	StoreEncryptedData(metaDsKey, mData, userdata.EnKey);
 }
 
@@ -266,7 +290,55 @@ func (userdata *User) StoreFile(filename string, data []byte) {
 // metadata you need.
 
 func (userdata *User) AppendFile(filename string, data []byte) (err error) {
-	return
+	//Making MetaFile Key for DataStore
+	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), userlib.HashSize));
+	
+	//Loading MetaFile struct
+	mData, _err := LoadDecryptedData(metaDsKey, userdata.EnKey);
+	if _err != nil {
+		return _err;
+	}
+
+	//unmarshalling data
+	var metaFdata MetaFile;
+	json.Unmarshal(mData, &metaFdata);
+
+	//checking the integrity of MetaFile
+	if metaDsKey != metaFdata.MyKey {
+		return errors.New(strings.ToTitle("Data Tampered"));
+	}
+
+	//Now we have to read until multiple data blocks if this is a shared block 
+	//Loading File struct
+	var filedata File;
+	var filedataKey string;
+	var filedataEnKey []byte;
+	filedataKey, filedataEnKey, filedata, _err = ReadFileStruct(metaFdata.FilePointer, metaFdata.EnKey);
+	if _err != nil {
+		return _err;
+	}
+
+	//Populating FileData struct
+	var fileDdata FileData;
+	fileDdata.Type = "value";
+	fileDdata.Value = data;
+	fileDdata.Length = len(data);
+	fileDdata.NextPointer = filedata.DataPointer;
+	fileDdata.NextEnKey = filedata.EnKey;
+	
+	//Finding address and encryption key for the new block
+	filedata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
+	filedata.DataPointer = string(userlib.RandomBytes(userlib.HashSize));
+	
+	//Marshalling and storing FileData struct
+	mData, _ = json.Marshal(fileDdata);
+	StoreEncryptedData(filedata.DataPointer, mData, filedata.EnKey);
+	
+	//Marshalling and storing File struct
+	mData, _ = json.Marshal(filedata);
+	StoreEncryptedData(filedataKey, mData, filedataEnKey);
+
+	return nil;
 }
 
 // This loads a file from the Datastore.
