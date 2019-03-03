@@ -76,7 +76,10 @@ func bytesToUUID(data []byte) (ret uuid.UUID) {
 type User struct {
 	Username string;
 	RSAPrivateKey userlib.PrivateKey;
+	// Arpit: Shouldn't the encryption key be unique for every 
+	// Metafile struct
 	EnKey []byte; // To encrypt MetaFile struct
+	// Arpit: type of UUID should be uuid.UUID, I think
 	UUID string;
 	// You can add other fields here if you want...
 	// Note for JSON to marshal/unmarshal, the fields need to
@@ -117,10 +120,12 @@ func StoreEncryptedData(key string, value []byte, enKey []byte) {
 	value := append(intergrityH.Sum(nil), ciphertext)
 
 	//Storing Data in DataStore
+	// Arpit: where is datastoreKey, i mean no such argument
 	userlib.DatastoreSet(datastoreKey, value);
 }
 
 func LoadDecryptedData(key string, enKey []byte) ([]byte, error) {
+	// Arpit: where is datastoreKey, i mean no such argument
 	value, ok := userlib.DatastoreGet(datastoreKey);
 	if !ok {
 		return nil, errors.New(strings.ToTitle("Key Does Not Exist"));
@@ -142,6 +147,7 @@ func LoadDecryptedData(key string, enKey []byte) ([]byte, error) {
 	
 	//Decrypt Data
 	iv := ciphertext[:userlib.BlockSize];
+	// Arpit: below it should be userlib.BlockSize
 	ciphertext = ciphertext[aes.BlockSize:]
 	stream := userlib.CFBDecrypter(enKey, iv);
 	stream.XORKeyStream(ciphertext, ciphertext);
@@ -152,7 +158,6 @@ func ReadFileStruct(key string, enKey []byte) (File, error) {
 	var filedata File;
 	var mData []byte;
 	var _err error;
-
 	for {
 		//Loading File struct
 		mData, _err = LoadDecryptedData(key, enKey);
@@ -203,6 +208,7 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	//Populating User data structure
 	var userdata User;
 	userdata.Username = username;
+	// Arpit: just reconfirm the way private key is assigned
 	userdata.RSAPrivateKey = *key;
 	userdata.UUID = uuid.New().String();
 	userdata.EnKey = userlib.RandomBytes(userlib.AESKeySize)
