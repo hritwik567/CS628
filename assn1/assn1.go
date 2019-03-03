@@ -78,8 +78,11 @@ type User struct {
 	RSAPrivateKey userlib.PrivateKey;
 	// Arpit: Shouldn't the encryption key be unique for every 
 	// Metafile struct
+	// Hritvik: We are not sharing this key with anyone so we don't have any problem
 	EnKey []byte; // To encrypt MetaFile struct
 	// Arpit: type of UUID should be uuid.UUID, I think
+	// Hritvik: It is easy to use this as a string 
+	// also I think uuid.UUID is typedef string
 	UUID string;
 	// You can add other fields here if you want...
 	// Note for JSON to marshal/unmarshal, the fields need to
@@ -121,12 +124,14 @@ func StoreEncryptedData(key string, value []byte, enKey []byte) {
 
 	//Storing Data in DataStore
 	// Arpit: where is datastoreKey, i mean no such argument
-	userlib.DatastoreSet(datastoreKey, value);
+	// Hritvik : Yes you are right it should be key
+	userlib.DatastoreSet(key, value);
 }
 
 func LoadDecryptedData(key string, enKey []byte) ([]byte, error) {
 	// Arpit: where is datastoreKey, i mean no such argument
-	value, ok := userlib.DatastoreGet(datastoreKey);
+	// Hritvik : Yes you are right it should be key
+	value, ok := userlib.DatastoreGet(key);
 	if !ok {
 		return nil, errors.New(strings.ToTitle("Key Does Not Exist"));
 	}
@@ -148,7 +153,8 @@ func LoadDecryptedData(key string, enKey []byte) ([]byte, error) {
 	//Decrypt Data
 	iv := ciphertext[:userlib.BlockSize];
 	// Arpit: below it should be userlib.BlockSize
-	ciphertext = ciphertext[aes.BlockSize:]
+	// Hritvik : Yes you are right it should be key
+	ciphertext = ciphertext[userlib.BlockSize:]
 	stream := userlib.CFBDecrypter(enKey, iv);
 	stream.XORKeyStream(ciphertext, ciphertext);
 	return ciphertext, nil;
