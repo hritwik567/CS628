@@ -351,6 +351,13 @@ func (userdata *User) LoadFile(filename string) (data []byte, err error) {
 // You may want to define what you actually want to pass as a
 // sharingRecord to serialized/deserialize in the data store.
 type sharingRecord struct {
+	EnKey []byte; // To encrypt File struct
+	FilePointer string; // Pointer to the corresponding File struct
+}
+
+type sharedData struct {
+	sign []byte;
+	message []byte;
 }
 
 // This creates a sharing record, which is a key pointing to something
@@ -366,7 +373,63 @@ type sharingRecord struct {
 
 func (userdata *User) ShareFile(filename string, recipient string) (
 	msgid string, err error) {
-	return
+	
+	//Making MetaFile Key for DataStore
+	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), userlib.HashSize));
+	
+	//Loading MetaFile struct
+	mData, _err := LoadDecryptedData(metaDsKey, userdata.EnKey);
+	if _err != nil {
+		return nil, _err;
+	}
+
+	//unmarshalling data
+	var metaFdata MetaFile;
+	json.Unmarshal(mData, &metaFdata);
+
+	//checking the integrity of MetaFile
+	if metaDsKey != metaFdata.MyKey {
+		return nil, errors.New(strings.ToTitle("Data Tampered"));
+	}
+
+	//Loading Address and EnKey of the File struct
+	var filedataKey string;
+	var filedataEnKey []byte;
+	filedataKey, filedataEnKey, _, _err = ReadFileStruct(metaFdata.FilePointer, metaFdata.EnKey);
+	if _err != nil {
+		return nil, _err;
+	}
+	
+	var sharing sharingRecord;
+	sharing.FilePointer = filedataKey;
+	sharing.EnKey = filedataEnKey;
+
+	mData, _ = json.Marshal(sharing);
+	
+	pubKey, ok := userlib.KeystoreGet(recipient);
+	if !ok {
+		return nil, errors.New(strings.ToTitle("Recipient Does Not Exist"));
+	}
+	
+	//encrypting
+	rsaEncrypted, _err := RSAEncrypt(&pubkey, mData, []byte("Tag"));
+	if _err != nil {
+		return nil, errors.New(strings.ToTitle("Could not Encrypt"));
+	}
+	
+	//signing
+	sign, _err := RSASign(&(userdata.PrivateKey), rsaEncrypted);
+	if _err != nil {
+		return nil, errors.New(strings.ToTitle("RSA sign failure"));
+	}
+	
+	var sharingMsg sharedData;
+	sharingMsg.sign = sign;
+	sharingMsg.message = rsaEncrypted;
+	
+	msgid, _ := json.Marshal(sharingMsg);
+
+	return msgid, nil;
 }
 
 // Note recipient's filename can be different from the sender's filename.
@@ -375,7 +438,54 @@ func (userdata *User) ShareFile(filename string, recipient string) (
 // it is authentically from the sender.
 func (userdata *User) ReceiveFile(filename string, sender string,
 	msgid string) error {
-	return nil
+	
+	pubKey, ok := userlib.KeystoreGet(sender);
+	if !ok {
+		return errors.New(strings.ToTitle("Sender Does Not Exist"));
+	}
+	
+	var sharingMsg sharedData;
+
+	//verifying the signature
+	_err := RSAVerify(&pubKey, sharingMsg.message, sharingMsg.sign);
+	if _err != nil {
+		return errors.New(strings.ToTitle("RSA verification failure"));
+	}
+	
+	//decrypting
+	decrypt, _err := RSADecrypt(&(userdata.PrivateKey), sharingMsg.message, []byte("Tag"))
+	if _err != nil {
+		return errors.New(strings.ToTitle("RSA decryption failure"));
+	}
+	
+	var sharing sharingRecord;
+	json.Unmarshal(decrypt, &sharing);
+	
+	//Making MetaFile Key for DataStore
+	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), userlib.HashSize));
+	
+	//Populating MetaFile struct
+	var metaFdata MetaFile;
+	metaFdata.MyKey = metaDsKey;
+	metaFdata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
+	metaFdata.FilePointer = string(userlib.RandomBytes(userlib.HashSize));
+
+	//Populating File struct
+	var filedata File;
+	filedata.Type = "shared";
+	filedata.OwnersUUID = userdata.UUID;
+	filedata.EnKey = sharing.EnKey;
+	filedata.DataPointer = sharing.FilePointer;
+
+	//Marshalling and storing File struct
+	mData, _ = json.Marshal(filedata);
+	StoreEncryptedData(metaFdata.FilePointer, mData, metaFdata.EnKey);
+	
+	//Marshalling and storing MetaFile struct
+	mData, _ = json.Marshal(metaFdata);
+	StoreEncryptedData(metaDsKey, mData, userdata.EnKey);
+
+	return nil;
 }
 
 // Removes access for all others.
