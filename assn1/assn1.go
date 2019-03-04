@@ -83,6 +83,9 @@ type User struct {
 	// Arpit: type of UUID should be uuid.UUID, I think
 	// Hritvik: It is easy to use this as a string 
 	// also I think uuid.UUID is typedef string
+	// Arpit: check bytesToUUID function. It is used 
+	// similar function. Anyway it's something to note while 
+	// debugging
 	UUID string;
 	// You can add other fields here if you want...
 	// Note for JSON to marshal/unmarshal, the fields need to
@@ -97,6 +100,7 @@ type MetaFile struct {
 
 type File struct {
 	Type string ; // whether this is a file or just the metadata
+	// Arpit: type of UUID. Though, it doesn't matter much
 	OwnersUUID string;
 	EnKey []byte; // To encrypt file data
 	DataPointer string; // The head of the file data
@@ -160,7 +164,9 @@ func LoadDecryptedData(key string, enKey []byte) ([]byte, error) {
 	return ciphertext, nil;
 }
 
-func ReadFileStruct(key string, enKey []byte) (File, error) {
+
+// Arpit: return value should also include key & EnKey in declaration below - DONE
+func ReadFileStruct(key string, enKey []byte) (string, []byte, File, error) {
 	var filedata File;
 	var mData []byte;
 	var _err error;
@@ -339,6 +345,7 @@ func (userdata *User) AppendFile(filename string, data []byte) (err error) {
 	fileDdata.NextEnKey = filedata.EnKey;
 	
 	//Finding address and encryption key for the new block
+	// Arpit -> Arpit: check size below
 	filedata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
 	filedata.DataPointer = string(userlib.RandomBytes(userlib.HashSize));
 	
@@ -357,7 +364,58 @@ func (userdata *User) AppendFile(filename string, data []byte) (err error) {
 //
 // It should give an error if the file is corrupted in any way.
 func (userdata *User) LoadFile(filename string) (data []byte, err error) {
-	return
+	// Making MetaFile Key for Datastore
+	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), 
+						userlib.Hashsize));
+	
+	// Loading Metafile struct
+	mData, _err := LoadDecryptedData(metaDsKey, userdata.EnKey);
+	if _err != nil {
+		return nil, _err;
+	}
+	
+	// Unmarshalling data
+	var metaFdata MetaFile;
+	json.Unmarshal(mData, &metaFdata);
+
+	// Integrity check
+	if metaDsKey != metaFdata.Mykey {
+		return nil, errors.New(strings.ToTitle("Data Tempered"));
+	}
+	
+	// Now read until finally owner's File struct is found
+	// Loading File struct
+	var filedata File;
+	_, _, filedata, _err = ReadFileStruct(metaFdata.FilePointer, 
+												 metaFdata.EnKey);
+	if _err != nil {
+		return nil, _err;
+	}
+
+	unmarshalledDataStruct, _err := LoadDecryptedData(filedata.DataPointer, filedata.EnKey);
+	if _err != nil {
+		return nil, _err;
+	}
+	
+	var fileDataStruct FileData;
+	json.Unmarshal(unmarshalledDataStruct, &fileDataStruct);
+	data := fileDataStruct.Value;
+	
+	// Load all the values from the linked list
+	for {
+		if fileDataStruct.NextPointer == nil {
+			break;
+		}
+		unmarshalledDataStruct, _err = LoadDecryptedData(fileDataStruct.NextPointer,
+										fileDataStruct.NextEnKey);
+		if _err != nil {
+			return nil, _err;
+		}
+		json.Unmarshal(unmarshalledDataStruct, &fileDataStruct);
+		data = append(fileDataStruct.Value, data);
+	}
+
+	return data, nil
 }
 
 // You may want to define what you actually want to pass as a
@@ -502,5 +560,92 @@ func (userdata *User) ReceiveFile(filename string, sender string,
 
 // Removes access for all others.
 func (userdata *User) RevokeFile(filename string) (err error) {
+	// Check if the user is owner of given file
+	// Making MetaFile Key for DataStore
+	metaDsKey = string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), userlib.HashSize));
+	mData, _err := LoadDecryptedData(metaDsKey, userdata.key);
+	if _err != nil {
+		return _err;
+	}
+	
+	// Unmarshalling data
+	var metFdata MetaFile;
+	json.Unmarshal(mData, &metaFdata);
+	
+	// Integrity check
+	if metaDsKey != metaFdata.Mykey {
+		return errors.New(strings.ToTitle("Data Tempered"));
+	}	
+	
+	// Loading File struct
+	var filedata File;
+	unmarshalledFileStruct, _err := LoadDecryptedData(metaFdata.FilePointer, metaFdata.EnKey);
+	if _err != nil {
+		return _err;
+	}
+	var file File;
+	json.Unmarshal(unmarshalledFileStruct, &file);
+	if file.OwnersUUID != userdata.UUID {
+		return errors.New(strings.ToTitle("Permission Denied: Not the owner of file"));
+	}
+	
+	// Load data of the file	
+	unmarshalledData, _err := LoadDecryptedData(file.DataPointer, file.EnKey);
+	if _err != nil {
+		return _err;
+	}
+	var fileData FileData;
+	json.Unmarshal(unmarshalledData, &fileData);
+	data := fileDataStruct.Value;
+	for {
+		if fileData.NextPointer == nil {
+			break;
+		}
+		unmarshalledData, _err = LoadDecryptionData(fileData.NextPointer, 
+								 fileData.NextEnKey);
+		if _err != nil {
+			return _err;
+		}
+		json.Unmarshal(unmarshalledData, &fileData);
+		data = append(fileData.Value, data);
+	}	
+	
+	// Arpit -> Arpit : call StoreFile if you can now since it's the same code
+	// Store file as a new file with the same metafile and everything else new
+	// Arpit: Is there any method to delete old structs?
+	// Populating MetaFile struct
+	var metaFdata MetaFile;
+	metaFdata.MyKey = metaDsKey;
+	metaFdata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
+	metaFdata.FilePointer = string(userlib.RandomBytes(userlib.HashSize));
+
+	// Populating File struct
+	var filedata File;
+	filedata.Type = "notShared";
+	filedata.OwnersUUID = userdata.UUID;
+	filedata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
+	filedata.DataPointer = string(userlib.RandomBytes(userlib.HashSize));
+
+	// Populating FileData struct
+	var fileDdata FileData;
+	fileDdata.Type = "value";
+	fileDdata.Value = data;
+	fileDdata.Length = len(data);
+	fileDdata.NextPointer = nil;
+	fileDdata.NextEnKey = nil;
+	
+	// Marshalling and storing FileData struct
+	mData, _ := json.Marshal(fileDdata);
+	StoreEncryptedData(filedata.DataPointer, mData, filedata.EnKey);
+	
+	// Marshalling and storing File struct
+	mData, _ = json.Marshal(filedata);
+	StoreEncryptedData(metaFdata.FilePointer, mData, metaFdata.EnKey);
+	
+	// Marshalling and storing MetaFile struct
+	mData, _ = json.Marshal(metaFdata);
+	StoreEncryptedData(metaDsKey, mData, userdata.EnKey);
+
+
 	return
 }
