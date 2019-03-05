@@ -125,19 +125,16 @@ func StoreEncryptedData(key string, value []byte, enKey []byte) {
 	ciphertext := make([]byte, userlib.BlockSize + len(value));
 	// Arpit: check the assignment below - given in userlib_test.go
 	// Not sure otherwise gives compilatioon error
-	iv := ciphertext[:userlib.BlockSize];
-	copy(iv, userlib.RandomBytes(userlib.BlockSize));
+	iv := userlib.RandomBytes(userlib.BlockSize);
+	copy(ciphertext[:userlib.BlockSize], iv);
 	stream := userlib.CFBEncrypter(enKey, iv);
 	stream.XORKeyStream(ciphertext[userlib.BlockSize:], value);
 	
 	//For integrity check
 	intergrityH := userlib.NewHMAC([]byte("nokey"))
 	intergrityH.Write([]byte(ciphertext));
-	value = append(intergrityH.Sum(nil), ciphertext[:])
-
+	value = append(intergrityH.Sum(nil), ciphertext...)
 	//Storing Data in DataStore
-	// Arpit: where is datastoreKey, i mean no such argument
-	// Hritvik : Yes you are right it should be key
 	userlib.DatastoreSet(key, value);
 }
 
@@ -422,7 +419,7 @@ func (userdata *User) LoadFile(filename string) (data []byte, err error) {
 			return nil, _err;
 		}
 		json.Unmarshal(unmarshalledDataStruct, &fileDataStruct);
-		data = append(fileDataStruct.Value, data[:]);
+		data = append(fileDataStruct.Value, data...);
 	}
 
 	return data, nil
@@ -533,7 +530,7 @@ func (userdata *User) ReceiveFile(filename string, sender string,
 	}
 	
 	//decrypting
-	decrypt, _err := userlib.RSADecrypt(&(userdata.PrivateKey), sharingMsg.message, []byte("Tag"))
+	decrypt, _err := userlib.RSADecrypt(&(userdata.RSAPrivateKey), sharingMsg.message, []byte("Tag"))
 	if _err != nil {
 		return errors.New(strings.ToTitle("RSA decryption failure"));
 	}
@@ -572,7 +569,7 @@ func (userdata *User) ReceiveFile(filename string, sender string,
 func (userdata *User) RevokeFile(filename string) (err error) {
 	// Check if the user is owner of given file
 	// Making MetaFile Key for DataStore
-	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uinnt32(userlib.HashSize)));
+	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize)));
 	mData, _err := LoadDecryptedData(metaDsKey, userdata.EnKey);
 	if _err != nil {
 		return _err;
@@ -588,7 +585,6 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 	}	
 	
 	// Loading File struct
-	var filedata File;
 	unmarshalledFileStruct, _err := LoadDecryptedData(metaFdata.FilePointer, metaFdata.EnKey);
 	if _err != nil {
 		return _err;
@@ -617,7 +613,7 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 			return _err;
 		}
 		json.Unmarshal(unmarshalledData, &fileData);
-		data = append(fileData.Value, data);
+		data = append(fileData.Value, data...);
 	}	
 	
 	// Arpit -> Arpit : call StoreFile if you can now since it's the same code
@@ -654,13 +650,5 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 	mData, _ = json.Marshal(metaFdata);
 	StoreEncryptedData(metaDsKey, mData, userdata.EnKey);
 
-
-	return
+	return nil;
 }
-
-/*
-func main() {
-		fmt.Println("Hello, world\n")
-
-}
-*/
