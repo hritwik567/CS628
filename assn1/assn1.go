@@ -9,7 +9,7 @@ package assn1
 import (
 	
 	// Arpit: remove fmt and main func
-	// "fmt"
+	//"fmt"
 	// -----------------IMP-----------	
 
 	// You neet to add with
@@ -78,6 +78,17 @@ func bytesToUUID(data []byte) (ret uuid.UUID) {
 	}
 	return
 }
+func BytesEqual(a, b []byte) bool {
+    if len(a) != len(b) {
+        return false
+    }
+    for i, v := range a {
+        if v != b[i] {
+            return false
+        }
+    }
+    return true
+}
 
 // The structure definition for a user record
 type User struct {
@@ -100,9 +111,9 @@ type User struct {
 }
 
 type MetaFile struct {
-	MyKey string;
+	MyKey []byte;
 	EnKey []byte; // To encrypt File struct
-	FilePointer string; // Pointer to the corresponding File struct
+	FilePointer []byte; // Pointer to the corresponding File struct
 }
 
 type File struct {
@@ -110,20 +121,20 @@ type File struct {
 	// Arpit: type of UUID. Though, it doesn't matter much
 	OwnersUUID string;
 	EnKey []byte; // To encrypt file data
-	DataPointer string; // The head of the file data
+	DataPointer []byte; // The head of the file data
 }
 
 type FileData struct {
 	Type string; // whether this is a file or just the metadata
 	Value []byte; // data
 	Length int; // whether this file is shared or not
-	NextPointer string; // Hash to the next pointer
+	NextPointer []byte; // Hash to the next pointer
 	NextEnKey []byte; // encryption key for the next block in the chain
 }
 
-func StoreEncryptedData(key string, value []byte, enKey []byte) {
+func StoreEncryptedData(key []byte, value []byte, enKey []byte) {
+	Tkey := string(key);
 	ciphertext := make([]byte, userlib.BlockSize + len(value));
-	// Arpit: check the assignment below - given in userlib_test.go
 	// Not sure otherwise gives compilatioon error
 	iv := userlib.RandomBytes(userlib.BlockSize);
 	copy(ciphertext[:userlib.BlockSize], iv);
@@ -135,13 +146,12 @@ func StoreEncryptedData(key string, value []byte, enKey []byte) {
 	intergrityH.Write([]byte(ciphertext));
 	value = append(intergrityH.Sum(nil), ciphertext...)
 	//Storing Data in DataStore
-	userlib.DatastoreSet(key, value);
+	userlib.DatastoreSet(Tkey, value);
 }
 
-func LoadDecryptedData(key string, enKey []byte) ([]byte, error) {
-	// Arpit: where is datastoreKey, i mean no such argument
-	// Hritvik : Yes you are right it should be key
-	value, ok := userlib.DatastoreGet(key);
+func LoadDecryptedData(key []byte, enKey []byte) ([]byte, error) {
+	Tkey := string(key);
+	value, ok := userlib.DatastoreGet(Tkey);
 	if !ok {
 		return nil, errors.New(strings.ToTitle("Key Does Not Exist"));
 	}
@@ -157,13 +167,11 @@ func LoadDecryptedData(key string, enKey []byte) ([]byte, error) {
 	ciphertextH := userlib.NewHMAC([]byte("nokey"));
 	ciphertextH.Write(ciphertext);
 	if !userlib.Equal(intergrityH, ciphertextH.Sum(nil)) {
-		return nil, errors.New(strings.ToTitle("Data Tampered"));
+		return nil, errors.New(strings.ToTitle("Data Tampered 1"));
 	}
 	
 	//Decrypt Data
 	iv := ciphertext[:userlib.BlockSize];
-	// Arpit: below it should be userlib.BlockSize
-	// Hritvik : Yes you are right it should be key
 	ciphertext = ciphertext[userlib.BlockSize:]
 	stream := userlib.CFBDecrypter(enKey, iv);
 	stream.XORKeyStream(ciphertext, ciphertext);
@@ -172,7 +180,7 @@ func LoadDecryptedData(key string, enKey []byte) ([]byte, error) {
 
 
 // Arpit: return value should also include key & EnKey in declaration below - DONE
-func ReadFileStruct(key string, enKey []byte) (string, []byte, File, error) {
+func ReadFileStruct(key []byte, enKey []byte) ([]byte, []byte, File, error) {
 	var filedata File;
 	var mData []byte;
 	var _err error;
@@ -180,7 +188,7 @@ func ReadFileStruct(key string, enKey []byte) (string, []byte, File, error) {
 		//Loading File struct
 		mData, _err = LoadDecryptedData(key, enKey);
 		if _err != nil {
-			return (""), mData, filedata, _err;
+			return make([]byte, 0), mData, filedata, _err;
 		}
 
 		//unmarshalling data
@@ -194,7 +202,7 @@ func ReadFileStruct(key string, enKey []byte) (string, []byte, File, error) {
 		enKey = filedata.EnKey;
 	}
 
-	return (""), mData, filedata, errors.New(strings.ToTitle("Data Tampered"));
+	return make([]byte, 0), mData, filedata, errors.New(strings.ToTitle("Data Tampered"));
 }
 // This creates a user.  It will only be called once for a user
 // (unless the keystore and datastore are cleared during testing purposes)
@@ -232,11 +240,11 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	userdata.EnKey = userlib.RandomBytes(userlib.AESKeySize)
 	
 	//Making Key for DataStore
-	datastoreKey := string(userlib.Argon2Key([]byte(password), []byte(username), uint32(userlib.HashSize)));
+	datastoreKey := userlib.Argon2Key([]byte(password), []byte(username), uint32(userlib.HashSize));
 	
 	//Marshalling and storing Data
 	mData, _ := json.Marshal(userdata);
-	enKey := []byte(userlib.Argon2Key([]byte(password), []byte("nosalt"), uint32(userlib.AESKeySize)));
+	enKey := userlib.Argon2Key([]byte(password), []byte("nosalt"), uint32(userlib.AESKeySize));
 	StoreEncryptedData(datastoreKey, mData, enKey);
 	
 	//Encrypting Data
@@ -253,8 +261,8 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 	}
 
 	//Loading data
-	datastoreKey := string(userlib.Argon2Key([]byte(password), []byte(username), uint32(userlib.HashSize)));
-	enKey := []byte(userlib.Argon2Key([]byte(password), []byte("nosalt"), uint32(userlib.AESKeySize)));
+	datastoreKey := userlib.Argon2Key([]byte(password), []byte(username), uint32(userlib.HashSize));
+	enKey := userlib.Argon2Key([]byte(password), []byte("nosalt"), uint32(userlib.AESKeySize));
 	mData, _err := LoadDecryptedData(datastoreKey, enKey);
 	if _err != nil {
 		return nil, _err;
@@ -271,27 +279,28 @@ func GetUser(username string, password string) (userdataptr *User, err error) {
 // The name of the file should NOT be revealed to the datastore!
 func (userdata *User) StoreFile(filename string, data []byte) {
 	//Making MetaFile Key for DataStore
-	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize)));
+	metaDsKey := userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize));
 	
 	//Populating MetaFile struct
 	var metaFdata MetaFile;
 	metaFdata.MyKey = metaDsKey;
 	metaFdata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
-	metaFdata.FilePointer = string(userlib.RandomBytes(userlib.HashSize));
+	metaFdata.FilePointer = userlib.RandomBytes(userlib.HashSize);
 
+	userlib.DebugMsg("StoreFile Debug Message", []byte(metaDsKey), []byte(metaFdata.MyKey));
 	//Populating File struct
 	var filedata File;
 	filedata.Type = "notShared";
 	filedata.OwnersUUID = userdata.UUID;
 	filedata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
-	filedata.DataPointer = string(userlib.RandomBytes(userlib.HashSize));
+	filedata.DataPointer = userlib.RandomBytes(userlib.HashSize);
 
 	//Populating FileData struct
 	var fileDdata FileData;
 	fileDdata.Type = "value";
 	fileDdata.Value = data;
 	fileDdata.Length = len(data);
-	fileDdata.NextPointer = "";
+	fileDdata.NextPointer = make([]byte, 0);
 	fileDdata.NextEnKey = make([]byte, 0);
 	
 	//Marshalling and storing FileData struct
@@ -315,7 +324,7 @@ func (userdata *User) StoreFile(filename string, data []byte) {
 
 func (userdata *User) AppendFile(filename string, data []byte) (err error) {
 	//Making MetaFile Key for DataStore
-	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize)));
+	metaDsKey := userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize));
 	
 	//Loading MetaFile struct
 	mData, _err := LoadDecryptedData(metaDsKey, userdata.EnKey);
@@ -328,14 +337,14 @@ func (userdata *User) AppendFile(filename string, data []byte) (err error) {
 	json.Unmarshal(mData, &metaFdata);
 
 	//checking the integrity of MetaFile
-	if metaDsKey != metaFdata.MyKey {
+	if !BytesEqual(metaDsKey, metaFdata.MyKey) {
 		return errors.New(strings.ToTitle("Data Tampered"));
 	}
 
 	//Now we have to read until multiple data blocks if this is a shared block 
 	//Loading File struct
 	var filedata File;
-	var filedataKey string;
+	var filedataKey []byte;
 	var filedataEnKey []byte;
 	filedataKey, filedataEnKey, filedata, _err = ReadFileStruct(metaFdata.FilePointer, metaFdata.EnKey);
 	if _err != nil {
@@ -353,7 +362,7 @@ func (userdata *User) AppendFile(filename string, data []byte) (err error) {
 	//Finding address and encryption key for the new block
 	// Arpit -> Arpit: check size below
 	filedata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
-	filedata.DataPointer = string(userlib.RandomBytes(userlib.HashSize));
+	filedata.DataPointer = userlib.RandomBytes(userlib.HashSize);
 	
 	//Marshalling and storing FileData struct
 	mData, _ = json.Marshal(fileDdata);
@@ -371,8 +380,7 @@ func (userdata *User) AppendFile(filename string, data []byte) (err error) {
 // It should give an error if the file is corrupted in any way.
 func (userdata *User) LoadFile(filename string) (data []byte, err error) {
 	// Making MetaFile Key for Datastore
-	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), 
-						uint32(userlib.HashSize)));
+	metaDsKey := userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize));
 	
 	// Loading Metafile struct
 	mData, _err := LoadDecryptedData(metaDsKey, userdata.EnKey);
@@ -385,8 +393,10 @@ func (userdata *User) LoadFile(filename string) (data []byte, err error) {
 	json.Unmarshal(mData, &metaFdata);
 
 	// Integrity check
-	if metaDsKey != metaFdata.MyKey {
-		return nil, errors.New(strings.ToTitle("Data Tempered"));
+	userlib.DebugMsg("Debug Message", []byte(metaDsKey), []byte(metaFdata.MyKey));
+
+	if !BytesEqual(metaDsKey, metaFdata.MyKey) {
+		return nil, errors.New(strings.ToTitle("Data Tempered 2"));
 	}
 	
 	// Now read until finally owner's File struct is found
@@ -410,7 +420,7 @@ func (userdata *User) LoadFile(filename string) (data []byte, err error) {
 	// Load all the values from the linked list
 	for {
 		// Not the correct way
-		if fileDataStruct.NextPointer == "" {
+		if len(fileDataStruct.NextPointer) == 0 {
 			break;
 		}
 		unmarshalledDataStruct, _err = LoadDecryptedData(fileDataStruct.NextPointer,
@@ -429,7 +439,7 @@ func (userdata *User) LoadFile(filename string) (data []byte, err error) {
 // sharingRecord to serialized/deserialize in the data store.
 type sharingRecord struct {
 	EnKey []byte; // To encrypt File struct
-	FilePointer string; // Pointer to the corresponding File struct
+	FilePointer []byte; // Pointer to the corresponding File struct
 }
 
 type sharedData struct {
@@ -449,10 +459,10 @@ type sharedData struct {
 // should be able to know the sender.
 
 func (userdata *User) ShareFile(filename string, recipient string) (
-	msgid []byte, err error) {
+	msgid string, err error) {
 	
 	//Making MetaFile Key for DataStore
-	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize)));
+	metaDsKey := userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize));
 	
 	//Loading MetaFile struct
 	mData, _err := LoadDecryptedData(metaDsKey, userdata.EnKey);
@@ -465,12 +475,12 @@ func (userdata *User) ShareFile(filename string, recipient string) (
 	json.Unmarshal(mData, &metaFdata);
 
 	//checking the integrity of MetaFile
-	if metaDsKey != metaFdata.MyKey {
+	if !BytesEqual(metaDsKey, metaFdata.MyKey) {
 		return msgid, errors.New(strings.ToTitle("Data Tampered"));
 	}
 
 	//Loading Address and EnKey of the File struct
-	var filedataKey string;
+	var filedataKey []byte;
 	var filedataEnKey []byte;
 	filedataKey, filedataEnKey, _, _err = ReadFileStruct(metaFdata.FilePointer, metaFdata.EnKey);
 	if _err != nil {
@@ -504,9 +514,9 @@ func (userdata *User) ShareFile(filename string, recipient string) (
 	sharingMsg.sign = sign;
 	sharingMsg.message = rsaEncrypted;
 	
-	msgid, _ = json.Marshal(sharingMsg);
+	tempMsgid, _ := json.Marshal(sharingMsg);
 
-	return msgid, nil;
+	return string(tempMsgid), nil;
 }
 
 // Note recipient's filename can be different from the sender's filename.
@@ -539,13 +549,13 @@ func (userdata *User) ReceiveFile(filename string, sender string,
 	json.Unmarshal(decrypt, &sharing);
 	
 	//Making MetaFile Key for DataStore
-	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize)));
+	metaDsKey := userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize));
 	
 	//Populating MetaFile struct
 	var metaFdata MetaFile;
 	metaFdata.MyKey = metaDsKey;
 	metaFdata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
-	metaFdata.FilePointer = string(userlib.RandomBytes(userlib.HashSize));
+	metaFdata.FilePointer = userlib.RandomBytes(userlib.HashSize);
 
 	//Populating File struct
 	var filedata File;
@@ -569,7 +579,7 @@ func (userdata *User) ReceiveFile(filename string, sender string,
 func (userdata *User) RevokeFile(filename string) (err error) {
 	// Check if the user is owner of given file
 	// Making MetaFile Key for DataStore
-	metaDsKey := string(userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize)));
+	metaDsKey := userlib.Argon2Key([]byte(userdata.UUID), []byte(filename), uint32(userlib.HashSize));
 	mData, _err := LoadDecryptedData(metaDsKey, userdata.EnKey);
 	if _err != nil {
 		return _err;
@@ -580,7 +590,7 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 	json.Unmarshal(mData, &metaFdata);
 	
 	// Integrity check
-	if metaDsKey != metaFdata.MyKey {
+	if !BytesEqual(metaDsKey, metaFdata.MyKey) {
 		return errors.New(strings.ToTitle("Data Tempered"));
 	}	
 	
@@ -591,7 +601,7 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 	}
 	var file File;
 	json.Unmarshal(unmarshalledFileStruct, &file);
-	if file.OwnersUUID != userdata.UUID {
+	if !(strings.Compare(file.OwnersUUID, userdata.UUID) == 0) {
 		return errors.New(strings.ToTitle("Permission Denied: Not the owner of file"));
 	}
 	
@@ -604,7 +614,7 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 	json.Unmarshal(unmarshalledData, &fileData);
 	data := fileData.Value;
 	for {
-		if fileData.NextPointer == "" {
+		if len(fileData.NextPointer) == 0 {
 			break;
 		}
 		unmarshalledData, _err = LoadDecryptedData(fileData.NextPointer, 
@@ -622,20 +632,20 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 	// Populating MetaFile struct
 	metaFdata.MyKey = metaDsKey;
 	metaFdata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
-	metaFdata.FilePointer = string(userlib.RandomBytes(userlib.HashSize));
+	metaFdata.FilePointer = userlib.RandomBytes(userlib.HashSize);
 
 	// Populating File struct
 	file.Type = "notShared";
 	file.OwnersUUID = userdata.UUID;
 	file.EnKey = userlib.RandomBytes(userlib.AESKeySize);
-	file.DataPointer = string(userlib.RandomBytes(userlib.HashSize));
+	file.DataPointer = userlib.RandomBytes(userlib.HashSize);
 
 	// Populating FileData struct
 	var fileDdata FileData;
 	fileDdata.Type = "value";
 	fileDdata.Value = data;
 	fileDdata.Length = len(data);
-	fileDdata.NextPointer = "";
+	fileDdata.NextPointer = make([]byte, 0);
 	fileDdata.NextEnKey = make([]byte, 0);
 	
 	// Marshalling and storing FileData struct

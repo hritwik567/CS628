@@ -13,7 +13,6 @@ func TestInit(t *testing.T) {
 	userlib.DebugPrint = true
 //	someUsefulThings()
 
-	userlib.DebugPrint = false
 	u, err := InitUser("alice", "fubar")
 	if err != nil {
 		// t.Error says the test fails
