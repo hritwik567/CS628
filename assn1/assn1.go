@@ -393,7 +393,7 @@ func (userdata *User) LoadFile(filename string) (data []byte, err error) {
 	json.Unmarshal(mData, &metaFdata);
 
 	// Integrity check
-	userlib.DebugMsg("Debug Message", []byte(metaDsKey), []byte(metaFdata.MyKey));
+	// userlib.DebugMsg("Debug Message", []byte(metaDsKey), []byte(metaFdata.MyKey));
 
 	if !BytesEqual(metaDsKey, metaFdata.MyKey) {
 		return nil, errors.New(strings.ToTitle("Data Tempered 2"));
@@ -443,8 +443,8 @@ type sharingRecord struct {
 }
 
 type sharedData struct {
-	sign []byte;
-	message []byte;
+	Sign []byte;
+	Message []byte;
 }
 
 // This creates a sharing record, which is a key pointing to something
@@ -511,10 +511,12 @@ func (userdata *User) ShareFile(filename string, recipient string) (
 	}
 	
 	var sharingMsg sharedData;
-	sharingMsg.sign = sign;
-	sharingMsg.message = rsaEncrypted;
+	sharingMsg.Sign = sign;
+	sharingMsg.Message = rsaEncrypted;
+	userlib.DebugMsg("Debug Message Share", sharingMsg);
 	
 	tempMsgid, _ := json.Marshal(sharingMsg);
+	userlib.DebugMsg("Debug Message Share Marshelled", tempMsgid);
 
 	return string(tempMsgid), nil;
 }
@@ -531,16 +533,19 @@ func (userdata *User) ReceiveFile(filename string, sender string,
 		return errors.New(strings.ToTitle("Sender Does Not Exist"));
 	}
 	
+	userlib.DebugMsg("Debug Message Recive", msgid);
 	var sharingMsg sharedData;
+	json.Unmarshal([]byte(msgid), &sharingMsg);
+	userlib.DebugMsg("Debug Message Recive", sharingMsg.Sign, sharingMsg.Message);
 
 	//verifying the signature
-	_err := userlib.RSAVerify(&pubKey, sharingMsg.message, sharingMsg.sign);
+	_err := userlib.RSAVerify(&pubKey, sharingMsg.Message, sharingMsg.Sign);
 	if _err != nil {
 		return errors.New(strings.ToTitle("RSA verification failure"));
 	}
 	
 	//decrypting
-	decrypt, _err := userlib.RSADecrypt(&(userdata.RSAPrivateKey), sharingMsg.message, []byte("Tag"))
+	decrypt, _err := userlib.RSADecrypt(&(userdata.RSAPrivateKey), sharingMsg.Message, []byte("Tag"))
 	if _err != nil {
 		return errors.New(strings.ToTitle("RSA decryption failure"));
 	}
