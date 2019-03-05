@@ -243,7 +243,10 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 	datastoreKey := userlib.Argon2Key([]byte(password), []byte(username), uint32(userlib.HashSize));
 	
 	//Marshalling and storing Data
-	mData, _ := json.Marshal(userdata);
+	mData, err := json.Marshal(userdata);
+	if err != nil {
+		return nil, err;
+	}
 	enKey := userlib.Argon2Key([]byte(password), []byte("nosalt"), uint32(userlib.AESKeySize));
 	StoreEncryptedData(datastoreKey, mData, enKey);
 	
@@ -304,15 +307,24 @@ func (userdata *User) StoreFile(filename string, data []byte) {
 	fileDdata.NextEnKey = make([]byte, 0);
 	
 	//Marshalling and storing FileData struct
-	mData, _ := json.Marshal(fileDdata);
+	mData, err := json.Marshal(fileDdata);
+	if err != nil {
+		return;
+	}
 	StoreEncryptedData(filedata.DataPointer, mData, filedata.EnKey);
 	
 	//Marshalling and storing File struct
-	mData, _ = json.Marshal(filedata);
+	mData, err = json.Marshal(filedata);
+	if err != nil {
+		return;
+	}
 	StoreEncryptedData(metaFdata.FilePointer, mData, metaFdata.EnKey);
 	
 	//Marshalling and storing MetaFile struct
-	mData, _ = json.Marshal(metaFdata);
+	mData, err = json.Marshal(metaFdata);
+	if err != nil {
+		return;
+	}
 	StoreEncryptedData(metaDsKey, mData, userdata.EnKey);
 }
 
@@ -365,11 +377,17 @@ func (userdata *User) AppendFile(filename string, data []byte) (err error) {
 	filedata.DataPointer = userlib.RandomBytes(userlib.HashSize);
 	
 	//Marshalling and storing FileData struct
-	mData, _ = json.Marshal(fileDdata);
+	mData, err = json.Marshal(fileDdata);
+	if err != nil {
+		return err;
+	}
 	StoreEncryptedData(filedata.DataPointer, mData, filedata.EnKey);
 	
 	//Marshalling and storing File struct
-	mData, _ = json.Marshal(filedata);
+	mData, err = json.Marshal(filedata);
+	if err != nil {
+		return err;
+	}
 	StoreEncryptedData(filedataKey, mData, filedataEnKey);
 
 	return nil;
@@ -491,7 +509,10 @@ func (userdata *User) ShareFile(filename string, recipient string) (
 	sharing.FilePointer = filedataKey;
 	sharing.EnKey = filedataEnKey;
 
-	mData, _ = json.Marshal(sharing);
+	mData, err = json.Marshal(sharing);
+	if err != nil {
+		return (""), err;
+	}
 	
 	pubKey, ok := userlib.KeystoreGet(recipient);
 	if !ok {
@@ -515,7 +536,10 @@ func (userdata *User) ShareFile(filename string, recipient string) (
 	sharingMsg.Message = rsaEncrypted;
 	userlib.DebugMsg("Debug Message Share", sharingMsg);
 	
-	tempMsgid, _ := json.Marshal(sharingMsg);
+	tempMsgid, err := json.Marshal(sharingMsg);
+	if err != nil {
+		return (""), err;
+	}
 	userlib.DebugMsg("Debug Message Share Marshelled", tempMsgid);
 
 	return string(tempMsgid), nil;
@@ -570,11 +594,17 @@ func (userdata *User) ReceiveFile(filename string, sender string,
 	filedata.DataPointer = sharing.FilePointer;
 
 	//Marshalling and storing File struct
-	mData, _ := json.Marshal(filedata);
+	mData, err := json.Marshal(filedata);
+	if err != nil {
+		return err;
+	}
 	StoreEncryptedData(metaFdata.FilePointer, mData, metaFdata.EnKey);
 	
 	//Marshalling and storing MetaFile struct
-	mData, _ = json.Marshal(metaFdata);
+	mData, err = json.Marshal(metaFdata);
+	if err != nil {
+		return err;
+	}
 	StoreEncryptedData(metaDsKey, mData, userdata.EnKey);
 
 	return nil;
@@ -656,15 +686,24 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 	fileDdata.NextEnKey = make([]byte, 0);
 	
 	// Marshalling and storing FileData struct
-	mData, _ = json.Marshal(fileDdata);
+	mData, err = json.Marshal(fileDdata);
+	if err != nil {
+		return err;
+	}
 	StoreEncryptedData(file.DataPointer, mData, file.EnKey);
 	
 	// Marshalling and storing File struct
-	mData, _ = json.Marshal(file);
+	mData, err = json.Marshal(file);
+	if err != nil {
+		return err;
+	}
 	StoreEncryptedData(metaFdata.FilePointer, mData, metaFdata.EnKey);
 	
 	// Marshalling and storing MetaFile struct
-	mData, _ = json.Marshal(metaFdata);
+	mData, err = json.Marshal(metaFdata);
+	if err != nil {
+		return err;
+	}
 	StoreEncryptedData(metaDsKey, mData, userdata.EnKey);
 
 	return nil;
