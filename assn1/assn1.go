@@ -618,12 +618,14 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 	var fileData FileData;
 	json.Unmarshal(unmarshalledData, &fileData);
 	data := fileData.Value;
+	userlib.DatastoreDelete(string(file.DataPointer));
 	for {
 		if len(fileData.NextPointer) == 0 {
 			break;
 		}
 		unmarshalledData, _err = LoadDecryptedData(fileData.NextPointer, 
 								 fileData.NextEnKey);
+		userlib.DatastoreDelete(string(fileData.NextPointer));
 		if _err != nil {
 			return _err;
 		}
@@ -635,7 +637,7 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 	// Store file as a new file with the same metafile and everything else new
 	// Arpit: Is there any method to delete old structs?
 	// Populating MetaFile struct
-	metaFdata.MyKey = metaDsKey;
+	userlib.DatastoreDelete(string(metaFdata.FilePointer));
 	metaFdata.EnKey = userlib.RandomBytes(userlib.AESKeySize);
 	metaFdata.FilePointer = userlib.RandomBytes(userlib.HashSize);
 
