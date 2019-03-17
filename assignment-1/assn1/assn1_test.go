@@ -63,6 +63,7 @@ func TestShare(t *testing.T) {
 	}
 
 	msgid, err = u.ShareFile("file1", "bob")
+	userlib.DebugMsg("Debug Message TestShare", msgid);
 	if err != nil {
 		t.Error("Failed to share the a file", err)
 	}
