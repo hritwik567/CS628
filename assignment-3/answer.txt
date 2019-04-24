@@ -1,0 +1,111 @@
+# Put your answers below the corresponding question number.
+# Don't invent your own numbering system, stick to what we have provided.
+
+
+-----------------------------------------------------------------
+[1]
+
+MAC-Addr          IP-Addr                              Manufacturer
+00:26:08:e5:66:07 10.0.2.1, 192.168.1.112, 192.168.1.1 Apple_e5:66:07
+04:0c:ce:d8:0f:fa 10.0.2.2                             Apple_d8:0f:fa
+8c:a9:82:50:f0:a6 10.0.2.3                             IntelCor_50:f0:a6
+
+
+-----------------------------------------------------------------
+[2]
+
+Since there are only few devices this appears to be a home network.
+
+
+-----------------------------------------------------------------
+[3.a]
+
+dl.xs4all.nl
+
+
+-----------------------------------------------------------------
+[3.b]
+
+Active
+
+
+-----------------------------------------------------------------
+[3.c]
+
+Un-encrypted data transfer
+
+
+-----------------------------------------------------------------
+[3.d]
+
+SFTP, FTP-SSL
+
+
+-----------------------------------------------------------------
+[4.a]
+
+weblogin.umich.edu
+
+
+
+-----------------------------------------------------------------
+[4.b]
+
+In ClientHello attacker can know the domain name of the site the client is connecting to. So, to prevent this SNI payload should be encrypted.
+
+Source: https://security.stackexchange.com/questions/86723/why-do-https-requests-include-the-host-name-in-clear-text/86727#86727
+
+-----------------------------------------------------------------
+[4.c]
+
+TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA (0xc00a)
+Algorithm: 256-bit AES encryption with SHA-1 message authentication and ephemeral ECDH key exchange signed with an ECDSA certificate
+
+TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA (0xc014)
+Algorithm: 256-bit AES encryption with SHA-1 message authentication and ephemeral ECDH key exchange signed with an RSA certificate
+
+TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA (0x0088)
+Algorithm: 256-bit Camellia encryption with SHA-1 message authentication and ephemeral DH key exchange signed with an RSA certificate
+
+Source:
+https://www.ibm.com/support/knowledgecenter/en/SSLTBW_2.3.0/com.ibm.zos.v2r3.gska100/csdcwh.htm
+https://www.ibm.com/support/knowledgecenter/en/SSWMAJ_2.0.0/com.ibm.ism.doc/Reference/_Topics/re00005_.html
+
+-----------------------------------------------------------------
+[4.d]
+
+TLS_ECDHE_ECDSA_WITH_RC4_128_SHA (0xc007)
+Issue: This cipher uses RC4 which has insecure biases in its output.
+
+Source: https://github.com/cpp-netlib/cpp-netlib/issues/689
+
+-----------------------------------------------------------------
+[4.e]
+
+TLS_DHE_RSA_WITH_AES_256_CBC_SHA (0x0039)
+
+
+-----------------------------------------------------------------
+[5.a]
+
+Logins are done using HTTPS protocol, but the rest of the requests are served using HTTP protocol. So, an attacker can steal Cookies by reading network packets after the victim has logged in.
+
+
+-----------------------------------------------------------------
+[5.b]
+
+Attacker can use seesion-id from the above stolen Cookie to impersonate the victim.
+
+
+-----------------------------------------------------------------
+[5.c]
+
+HSTS should be used, because once the browser is forced to use HTTPS during login then it will prevent any communications from being sent over HTTP.
+
+
+-----------------------------------------------------------------
+[5.d]
+
+While reading a blog post user is liking authors facebook page by clicking on like thumbnail.
+
+
